@@ -1,13 +1,13 @@
 import { initTRPC } from '@trpc/server';
-import express from 'express';
+import Koa from 'koa';
 import fetch from 'node-fetch';
 import { z } from 'zod';
 
 import {
-  CreateOpenApiExpressMiddlewareOptions,
+  CreateOpenApiKoaMiddlewareOptions,
   OpenApiMeta,
   OpenApiRouter,
-  createOpenApiExpressMiddleware,
+  createOpenApiKoaMiddleware,
 } from '../../src';
 
 const createContextMock = jest.fn();
@@ -20,22 +20,21 @@ const clearMocks = () => {
   onErrorMock.mockClear();
 };
 
-const createExpressServerWithRouter = <TRouter extends OpenApiRouter>(
-  handlerOpts: CreateOpenApiExpressMiddlewareOptions<TRouter>,
-  serverOpts?: { basePath?: `/${string}` },
+const createKoaServerWithRouter = <TRouter extends OpenApiRouter>(
+  handlerOpts: CreateOpenApiKoaMiddlewareOptions<TRouter>,
 ) => {
-  const openApiExpressMiddleware = createOpenApiExpressMiddleware({
+  const openApiKoaMiddleware = createOpenApiKoaMiddleware({
     router: handlerOpts.router,
     createContext: handlerOpts.createContext ?? createContextMock,
-    responseMeta: handlerOpts.responseMeta ?? responseMetaMock,
-    onError: handlerOpts.onError ?? onErrorMock,
+    responseMeta: handlerOpts.responseMeta ?? (responseMetaMock as any),
+    onError: handlerOpts.onError ?? (onErrorMock as any),
     maxBodySize: handlerOpts.maxBodySize,
-  } as any);
+  });
 
-  const app = express();
+  const app = new Koa();
 
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
-  app.use(serverOpts?.basePath ?? '/', openApiExpressMiddleware);
+  app.use(openApiKoaMiddleware);
 
   const server = app.listen(0);
   const port = (server.address() as any).port as number;
@@ -49,7 +48,7 @@ const createExpressServerWithRouter = <TRouter extends OpenApiRouter>(
 
 const t = initTRPC.meta<OpenApiMeta>().context<any>().create();
 
-describe('express adapter', () => {
+describe('koa adapter', () => {
   afterEach(() => {
     clearMocks();
   });
@@ -73,7 +72,7 @@ describe('express adapter', () => {
         .query(({ input }) => ({ greeting: `Hello ${input.name}!` })),
     });
 
-    const { url, close } = createExpressServerWithRouter({
+    const { url, close } = createKoaServerWithRouter({
       router: appRouter,
     });
 
@@ -112,33 +111,6 @@ describe('express adapter', () => {
       expect(responseMetaMock).toHaveBeenCalledTimes(1);
       expect(onErrorMock).toHaveBeenCalledTimes(0);
     }
-
-    close();
-  });
-
-  test('with basePath', async () => {
-    const appRouter = t.router({
-      echo: t.procedure
-        .meta({ openapi: { method: 'GET', path: '/echo' } })
-        .input(z.object({ payload: z.string() }))
-        .output(z.object({ payload: z.string() }))
-        .query(({ input }) => ({ payload: input.payload })),
-    });
-
-    const { url, close } = createExpressServerWithRouter(
-      { router: appRouter },
-      { basePath: '/open-api' },
-    );
-
-    const res = await fetch(`${url}/open-api/echo?payload=mcampa`, { method: 'GET' });
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      payload: 'mcampa',
-    });
-    expect(createContextMock).toHaveBeenCalledTimes(1);
-    expect(responseMetaMock).toHaveBeenCalledTimes(1);
-    expect(onErrorMock).toHaveBeenCalledTimes(0);
 
     close();
   });
