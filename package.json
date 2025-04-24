@@ -1,5 +1,5 @@
 {
-  "name": "trpc-to-openapi",
+  "name": "@vrplatform/trpc-openapi",
   "version": "2.1.2",
   "description": "tRPC OpenAPI",
   "author": "mcampa",
